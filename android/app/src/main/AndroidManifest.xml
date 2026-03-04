@@ -1,5 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.drestaputra.kepoih">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -12,7 +11,7 @@
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
-            android:name=".MainActivity"
+            android:name="com.drestaputra.kepoih.MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
@@ -41,7 +40,7 @@
 
         <!-- Custom Foreground Service for Gyroscope Monitoring -->
         <service
-            android:name=".GyroscopeService"
+            android:name="com.drestaputra.kepoih.GyroscopeService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="specialUse">
