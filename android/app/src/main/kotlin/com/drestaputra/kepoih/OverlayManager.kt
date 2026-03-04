@@ -1,28 +1,67 @@
 package com.drestaputra.kepoih
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapShader
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PixelFormat
+import android.graphics.Shader
 import android.os.Build
+import android.os.SystemClock
 import android.view.View
 import android.view.WindowManager
+import kotlin.math.abs
+import kotlin.math.min
+import kotlin.math.sign
 import kotlin.random.Random
 
 class PrivacyOverlayView(context: Context) : View(context) {
-    private val paint = Paint().apply {
+    private val linePaint = Paint().apply {
         style = Paint.Style.FILL
     }
-    private var blurIntensity: Float = 0f
+    private val noisePaint = Paint().apply {
+        style = Paint.Style.FILL
+    }
+
+    private var targetBlurIntensity: Float = 0f
+    private var currentBlurIntensity: Float = 0f
 
     // Matrix of noise properties
     private val lineSpacing = 6f
     private val lineWidth = 3f
 
+    private var lastDrawTime = 0L
+    private var noiseShader: BitmapShader? = null
+
+    init {
+        createNoiseShader()
+    }
+
+    private fun createNoiseShader() {
+        val size = 256
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val paint = Paint()
+        val dots = (size * size) / 3 // Density of noise
+        for (i in 0 until dots) {
+            val x = Random.nextInt(size).toFloat()
+            val y = Random.nextInt(size).toFloat()
+            paint.color = Color.argb(Random.nextInt(50, 200), 0, 0, 0)
+            canvas.drawPoint(x, y, paint)
+            // Draw slightly larger blocks for some noise
+            if (i % 5 == 0) {
+                canvas.drawRect(x, y, x + 2f, y + 2f, paint)
+            }
+        }
+        noiseShader = BitmapShader(bitmap, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
+        noisePaint.shader = noiseShader
+    }
+
     fun updateBlurIntensity(intensity: Float) {
-        if (this.blurIntensity != intensity) {
-            this.blurIntensity = intensity
+        if (this.targetBlurIntensity != intensity) {
+            this.targetBlurIntensity = intensity
             invalidate() // Request redraw
         }
     }
@@ -30,47 +69,56 @@ class PrivacyOverlayView(context: Context) : View(context) {
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
-        if (blurIntensity <= 0) return
+        val now = SystemClock.uptimeMillis()
+        if (lastDrawTime > 0) {
+            // max dt is 50ms to prevent large jumps
+            val dt = min(now - lastDrawTime, 50L)
+            if (currentBlurIntensity != targetBlurIntensity) {
+                val diff = targetBlurIntensity - currentBlurIntensity
+                // Transition duration: 120ms to cover a distance of 1.0 (or to cover any diff in 120ms?)
+                // AGENTS.md: "blur transition duration: 120ms". Let's make the speed constant
+                // so a diff of 1.0 takes 120ms. Speed = 1.0 / 120f per ms
+                val step = (dt / 120f)
+                if (abs(diff) <= step) {
+                    currentBlurIntensity = targetBlurIntensity
+                } else {
+                    currentBlurIntensity += sign(diff) * step
+                }
+                invalidate() // Keep animating
+            }
+        } else {
+            currentBlurIntensity = targetBlurIntensity
+            if (currentBlurIntensity != 0f) invalidate()
+        }
+        lastDrawTime = now
 
-        // To simulate a physical privacy screen (like Samsung's), we can draw a fine
-        // grid or interleaved lines that obscure the screen. When viewed straight,
-        // it acts like a mild tint. When viewed from an angle (blurIntensity > 0),
-        // the lines become thicker or darker to block out more light.
+        if (currentBlurIntensity <= 0f) return
+
+        val blur = currentBlurIntensity.coerceIn(0f, 3f)
 
         // 1. Draw a dark tint based on intensity to simulate brightness reduction
-        val alphaBase = (blurIntensity / 3f * 200).toInt().coerceIn(0, 200)
+        val alphaBase = (blur / 3f * 200).toInt().coerceIn(0, 200)
         canvas.drawColor(Color.argb(alphaBase, 0, 0, 0))
 
         // 2. Draw fine vertical lines to simulate privacy louvers
-        // The opacity and thickness of lines increase with blurIntensity
-        val lineAlpha = (blurIntensity / 3f * 255).toInt().coerceIn(0, 255)
-        paint.color = Color.argb(lineAlpha, 0, 0, 0)
+        val lineAlpha = (blur / 3f * 255).toInt().coerceIn(0, 255)
+        linePaint.color = Color.argb(lineAlpha, 0, 0, 0)
 
-        val width = width.toFloat()
-        val height = height.toFloat()
+        val w = width.toFloat()
+        val h = height.toFloat()
 
-        // Increase line thickness based on intensity
-        val currentLineWidth = lineWidth + (blurIntensity * 1.5f)
+        val currentLineWidth = lineWidth + (blur * 1.5f)
 
         var x = 0f
-        while (x < width) {
-            canvas.drawRect(x, 0f, x + currentLineWidth, height, paint)
+        while (x < w) {
+            canvas.drawRect(x, 0f, x + currentLineWidth, h, linePaint)
             x += lineSpacing + currentLineWidth
         }
 
-        // 3. Draw random noise to further scatter pixels and obscure text
-        val numNoises = (blurIntensity * 1000).toInt()
-        val noiseSize = 10f
-        paint.color = Color.BLACK
-
-        for (i in 0 until numNoises) {
-            val nx = Random.nextFloat() * width
-            val ny = Random.nextFloat() * height
-            val alphaNoise = Random.nextInt(150, 255)
-
-            paint.alpha = alphaNoise
-            canvas.drawRect(nx, ny, nx + noiseSize, ny + noiseSize, paint)
-        }
+        // 3. Draw repeating static noise to obscure pixels
+        val noiseAlpha = (blur / 3f * 255).toInt().coerceIn(0, 255)
+        noisePaint.alpha = noiseAlpha
+        canvas.drawRect(0f, 0f, w, h, noisePaint)
     }
 }
 
