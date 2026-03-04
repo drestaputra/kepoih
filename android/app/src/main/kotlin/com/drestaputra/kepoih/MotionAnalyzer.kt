@@ -39,7 +39,7 @@ class MotionAnalyzer {
             blurIntensity = 1f
         }
 
-        // Clamp 0 to 3
+        // Mapping 0 to 3
         return blurIntensity.coerceIn(0f, 3f)
     }
 }
