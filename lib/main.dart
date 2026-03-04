@@ -1,121 +1,209 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const KepoIhApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class KepoIhApp extends StatelessWidget {
+  const KepoIhApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'KepoIh',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(
+            seedColor: Colors.deepPurple, brightness: Brightness.dark),
+        useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const SettingsPage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class SettingsPage extends StatefulWidget {
+  const SettingsPage({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<SettingsPage> createState() => _SettingsPageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _SettingsPageState extends State<SettingsPage> {
+  static const platform = MethodChannel('com.drestaputra.kepoih/privacy');
 
-  void _incrementCounter() {
+  bool _isServiceRunning = false;
+  double _sensitivityLevel = 1.2;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkServiceStatus();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _sensitivityLevel = prefs.getDouble('sensitivity') ?? 1.2;
     });
+  }
+
+  Future<void> _saveSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('sensitivity', _sensitivityLevel);
+  }
+
+  Future<void> _checkServiceStatus() async {
+    try {
+      final bool isRunning = await platform.invokeMethod('isServiceRunning');
+      setState(() {
+        _isServiceRunning = isRunning;
+      });
+    } on PlatformException catch (e) {
+      debugPrint("Failed to get service status: '${e.message}'.");
+    }
+  }
+
+  Future<void> _toggleService() async {
+    if (_isServiceRunning) {
+      await _stopService();
+    } else {
+      await _startService();
+    }
+  }
+
+  Future<void> _startService() async {
+    if (!await Permission.systemAlertWindow.isGranted) {
+      final status = await Permission.systemAlertWindow.request();
+      if (!status.isGranted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content:
+                    Text('Overlay permission is required to blur the screen.')),
+          );
+        }
+        return;
+      }
+    }
+
+    try {
+      await platform.invokeMethod('startService', {'sensitivity': _sensitivityLevel});
+      setState(() {
+        _isServiceRunning = true;
+      });
+    } on PlatformException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error starting protection: ${e.message}')),
+        );
+      }
+    }
+  }
+
+  Future<void> _stopService() async {
+    try {
+      await platform.invokeMethod('stopService');
+      setState(() {
+        _isServiceRunning = false;
+      });
+    } on PlatformException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error stopping protection: ${e.message}')),
+        );
+      }
+    }
+  }
+
+  String _getSensitivityLabel(double value) {
+    if (value < 1.0) return 'Low';
+    if (value < 1.8) return 'Medium';
+    return 'High';
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: const Text('KepoIh Privacy'),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+      body: Padding(
+        padding: const EdgeInsets.all(24.0),
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+            Center(
+              child: Icon(
+                _isServiceRunning ? Icons.security : Icons.gpp_maybe,
+                size: 100,
+                color: _isServiceRunning ? Colors.green : Colors.red,
+              ),
             ),
+            const SizedBox(height: 16),
+            Center(
+              child: Text(
+                _isServiceRunning
+                    ? 'Protection Active'
+                    : 'Protection Inactive',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+            ),
+            const SizedBox(height: 48),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Toggle Privacy Protection',
+                        style: TextStyle(fontSize: 16)),
+                    Switch(
+                      value: _isServiceRunning,
+                      onChanged: (value) => _toggleService(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text('Sensitivity',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text(
+              'Current: ${_getSensitivityLabel(_sensitivityLevel)}',
+              style: TextStyle(color: Colors.grey[400]),
+            ),
+            Slider(
+              value: _sensitivityLevel,
+              min: 0.5,
+              max: 2.5,
+              divisions: 10,
+              label: _getSensitivityLabel(_sensitivityLevel),
+              onChanged: _isServiceRunning
+                  ? null // Disable slider when service is running
+                  : (value) {
+                      setState(() {
+                        _sensitivityLevel = value;
+                      });
+                    },
+              onChangeEnd: (value) {
+                _saveSettings();
+              },
+            ),
+            if (_isServiceRunning)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.0),
+                child: Text(
+                  'Stop protection to adjust sensitivity.',
+                  style: TextStyle(color: Colors.amber, fontSize: 12),
+                ),
+              )
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
       ),
     );
   }

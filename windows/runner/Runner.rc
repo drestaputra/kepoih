@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.drestaputra.kepoih" "\0"
-            VALUE "FileDescription", "v2" "\0"
+            VALUE "CompanyName", "com.drestaputra" "\0"
+            VALUE "FileDescription", "kepoih" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "v2" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.drestaputra.kepoih. All rights reserved." "\0"
-            VALUE "OriginalFilename", "v2.exe" "\0"
-            VALUE "ProductName", "v2" "\0"
+            VALUE "InternalName", "kepoih" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 com.drestaputra. All rights reserved." "\0"
+            VALUE "OriginalFilename", "kepoih.exe" "\0"
+            VALUE "ProductName", "kepoih" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
