@@ -35,27 +35,40 @@ class PrivacyOverlayView(context: Context) : View(context) {
     private var lastDrawTime = 0L
     private var noiseShader: BitmapShader? = null
 
+    // Dynamic noise variables
+    private var lastNoiseIntensity: Float = -1f
+    private val noiseBitmapSize = 128
+    private var noiseBitmap: Bitmap = Bitmap.createBitmap(noiseBitmapSize, noiseBitmapSize, Bitmap.Config.ARGB_8888)
+
     init {
-        createNoiseShader()
+        updateNoiseShader(0f)
     }
 
-    private fun createNoiseShader() {
-        val size = 256
-        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        val paint = Paint()
-        val dots = (size * size) / 3 // Density of noise
-        for (i in 0 until dots) {
-            val x = Random.nextInt(size).toFloat()
-            val y = Random.nextInt(size).toFloat()
-            paint.color = Color.argb(Random.nextInt(50, 200), 0, 0, 0)
-            canvas.drawPoint(x, y, paint)
-            // Draw slightly larger blocks for some noise
-            if (i % 5 == 0) {
-                canvas.drawRect(x, y, x + 2f, y + 2f, paint)
+    private fun updateNoiseShader(intensity: Float) {
+        if (abs(lastNoiseIntensity - intensity) < 0.1f) return
+        lastNoiseIntensity = intensity
+
+        val pixels = IntArray(noiseBitmapSize * noiseBitmapSize)
+        val baseAlpha = (intensity / 3f * 255).toInt().coerceIn(100, 255)
+
+        // Probability of a pixel being noise vs clear (0.0 to 0.8 max density)
+        val density = (intensity / 3f * 0.8f).coerceIn(0f, 0.8f)
+
+        for (i in pixels.indices) {
+            if (Random.nextFloat() < density) {
+                // Generate a noise pixel (dark/opaque to block view)
+                val noiseAlpha = Random.nextInt(baseAlpha, 255)
+                val colorOffset = Random.nextInt(-20, 20)
+                val c = (50 + colorOffset).coerceIn(0, 255) // Dark gray/black noise
+                pixels[i] = Color.argb(noiseAlpha, c, c, c)
+            } else {
+                // Clear pixel to show underlying content
+                pixels[i] = Color.TRANSPARENT
             }
         }
-        noiseShader = BitmapShader(bitmap, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
+
+        noiseBitmap.setPixels(pixels, 0, noiseBitmapSize, 0, 0, noiseBitmapSize, noiseBitmapSize)
+        noiseShader = BitmapShader(noiseBitmap, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
         noisePaint.shader = noiseShader
     }
 
@@ -115,9 +128,10 @@ class PrivacyOverlayView(context: Context) : View(context) {
             x += lineSpacing + currentLineWidth
         }
 
-        // 3. Draw repeating static noise to obscure pixels
-        val noiseAlpha = (blur / 3f * 255).toInt().coerceIn(0, 255)
-        noisePaint.alpha = noiseAlpha
+        // 3. Draw dynamic pixel mask (noise) to obscure pixels
+        updateNoiseShader(blur)
+        // Reset paint alpha since shader handles alpha per pixel
+        noisePaint.alpha = 255
         canvas.drawRect(0f, 0f, w, h, noisePaint)
     }
 }
